@@ -1,0 +1,3 @@
+[submodule "patch/winit"]
+	path = patch/winit
+	url = git@github.com:december1981/winit.git

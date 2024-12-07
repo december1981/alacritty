@@ -155,7 +155,7 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
     /// for its action to be executed.
     fn process_key_bindings(&mut self, key: &KeyEvent) -> bool {
         let mode = BindingMode::new(self.ctx.terminal().mode(), self.ctx.search_active());
-        let mods = self.ctx.modifiers().state();
+        let mods = self.ctx.modifiers().state().difference(ModifiersState::CAPS_LOCK | ModifiersState::NUM_LOCK);
 
         // Don't suppress char if no bindings were triggered.
         let mut suppress_chars = None;
@@ -254,7 +254,10 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
 /// The key sequences for `APP_KEYPAD` and alike are handled inside the bindings.
 #[inline(never)]
 fn build_sequence(key: KeyEvent, mods: ModifiersState, mode: TermMode) -> Vec<u8> {
-    let mut modifiers = mods.into();
+    let mut modifiers: SequenceModifiers = mods.into();
+    if !mode.contains(TermMode::DISAMBIGUATE_ESC_CODES) {
+        modifiers = modifiers.difference(SequenceModifiers::CAPS_LOCK | SequenceModifiers::NUM_LOCK);
+    }
 
     let kitty_seq = mode.intersects(
         TermMode::REPORT_ALL_KEYS_AS_ESC
@@ -631,12 +634,16 @@ bitflags::bitflags! {
     /// The modifiers encoding for escape sequence.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     struct SequenceModifiers : u8 {
-        const SHIFT   = 0b0000_0001;
-        const ALT     = 0b0000_0010;
-        const CONTROL = 0b0000_0100;
-        const SUPER   = 0b0000_1000;
-        // NOTE: Kitty protocol defines additional modifiers to what is present here, like
-        // Capslock, but it's not a modifier as per winit.
+        const SHIFT     = 0b0000_0001;
+        const ALT       = 0b0000_0010;
+        const CONTROL   = 0b0000_0100;
+        const SUPER     = 0b0000_1000;
+        // Additional modifiers from the kitty spec,
+        // but not yet modifiers as per winit.
+        // const HYPER  = 0b0001_0000;
+        // const META   = 0b0010_0000;
+        const CAPS_LOCK = 0b0100_0000;
+        const NUM_LOCK  = 0b1000_0000;
     }
 }
 
@@ -654,6 +661,8 @@ impl From<ModifiersState> for SequenceModifiers {
         modifiers.set(Self::ALT, mods.alt_key());
         modifiers.set(Self::CONTROL, mods.control_key());
         modifiers.set(Self::SUPER, mods.super_key());
+        modifiers.set(Self::CAPS_LOCK, mods.caps_lock_on());
+        modifiers.set(Self::NUM_LOCK, mods.num_lock_on());
         modifiers
     }
 }
